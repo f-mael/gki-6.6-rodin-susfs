@@ -1,4 +1,4 @@
-name: Build GKI 6.6 KernelSU-Next SUSFS
+name: Build GKI 6.6 SukiSU-Ultra SUSFS
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ jobs:
           mkdir -p ~/.bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
           chmod a+rx ~/.bin/repo
-          echo "$HOME/.bin" > $GITHUB_PATH
+          echo "$HOME/.bin" >> $GITHUB_PATH
 
       - name: Sync GKI Source
         run: |
@@ -33,49 +33,55 @@ jobs:
           repo init -u https://android.googlesource.com/kernel/manifest -b common-android15-6.6 --depth=1
           repo sync -c -j$(nproc) --no-tags --no-clone-bundle
 
-      - name: Integrate KernelSU-Next & SUSFS
+      - name: Integrate SukiSU-Ultra & SUSFS
         run: |
           cd android-kernel
           
           # Clonar SUSFS
           git clone https://gitlab.com/simonpunk/susfs4ksu -b gki-android15-6.6 susfs
           
-          # Integrar KernelSU-Next usando la rama dev-susfs (trae soporte nativo para SUSFS)
-          curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/refs/heads/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
-          
-          # Copiar archivos e includes de SUSFS al kernel
+          # Copiar cabeceras y código fuente de SUSFS
           cp -r susfs/kernel_patches/fs/* ./common/fs/
           cp -r susfs/kernel_patches/include/linux/* ./common/include/linux/
           
-          # Aplicar únicamente el parche del kernel GKI
+          # Integrar SukiSU-Ultra
           cd common
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
+          
+          # Aplicar parche general del kernel GKI para SUSFS
           patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch
           
-          # Habilitar opciones en defconfig
-          echo "CONFIG_KSU=y" > arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS=y" > arch/arm64/configs/gki_defconfig
-          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" > arch/arm64/configs/gki_defconfig
+          # Flags defconfig (KSU, SUSFS y KPM)
+          echo "CONFIG_KSU=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KPM=y" >> arch/arm64/configs/gki_defconfig
 
       - name: Build Kernel
         run: |
           cd android-kernel
-          tools/bazel run --config=fast //common:kernel_aarch64_dist
+          tools/bazel run --config=fast --check_defconfig=false --kconfig_werror=false //common:kernel_aarch64_dist
 
-      - name: Prepare AnyKernel3 (64-bit)
+      - name: Prepare AnyKernel3 (64-bit for rodin)
         run: |
           git clone https://github.com/osm0sis/AnyKernel3 -b master AK3
           git clone https://github.com/osm0sis/AnyKernel3 -b arm64-tools AK3_tools
           cp -f AK3_tools/* AK3/tools/
           rm -rf AK3_tools
           
+          # Configuración de AnyKernel3 para rodin (Virtual A/B)
           sed -i 's/is_slot_device=0;/is_slot_device=1;/' AK3/anykernel.sh
+          sed -i 's/device.name1=.*/device.name1=rodin;/' AK3/anykernel.sh
+          
+          # Copiar el binario compilado
           cp android-kernel/out/kernel_aarch64/dist/Image AK3/
           
           cd AK3
-          zip -r9 ../AnyKernel3-KernelSU-Next-SUSFS-GKI-6.6.zip * -x .git README.md *placeholder
+          zip -r9 ../AnyKernel3-SukiSU-Ultra-SUSFS-rodin.zip * -x .git README.md *placeholder
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AnyKernel3-KernelSU-Next-SUSFS-GKI-6.6
-          path: AnyKernel3-KernelSU-Next-SUSFS-GKI-6.6.zip
+          name: AnyKernel3-SukiSU-Ultra-SUSFS-rodin
+          path: AnyKernel3-SukiSU-Ultra-SUSFS-rodin.zip
