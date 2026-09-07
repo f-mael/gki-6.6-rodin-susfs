@@ -3,9 +3,6 @@ name: Build GKI 6.6 SukiSU-Ultra SUSFS
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
