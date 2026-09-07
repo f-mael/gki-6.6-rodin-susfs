@@ -1,4 +1,4 @@
-name: Build GKI 6.6 SukiSU-Ultra SUSFS
+name: Build GKI 6.6 SukiSU-Ultra SUSFS.
 
 on:
   workflow_dispatch:
