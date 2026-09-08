@@ -34,31 +34,26 @@ jobs:
           repo sync -c -j$(nproc) --no-tags --no-clone-bundle
 
       - name: Integrate SukiSU-Ultra & SUSFS
-        env:
-          SUKISU_COMMIT: main
-          SUSFS_BRANCH: gki-android15-6.6
         run: |
           cd android-kernel
-          git clone https://gitlab.com/simonpunk/susfs4ksu -b "$SUSFS_BRANCH" susfs
+          git clone https://gitlab.com/simonpunk/susfs4ksu -b gki-android15-6.6 susfs
           cp -r susfs/kernel_patches/fs/* ./common/fs/
           cp -r susfs/kernel_patches/include/linux/* ./common/include/linux/
 
           cd common
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/$SUKISU_COMMIT/kernel/setup.sh" | bash -s builtin
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
           patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch
 
-          cat >> arch/arm64/configs/gki_defconfig <<'EOF'
-CONFIG_KSU=y
-CONFIG_KPROBES=y
-CONFIG_KSU_SUSFS=y
-CONFIG_KSU_SUSFS_SUS_PATH=y
-CONFIG_KSU_SUSFS_SUS_MOUNT=y
-CONFIG_KSU_SUSFS_SUS_KSTAT=y
-CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-CONFIG_KSU_SUSFS_ENABLE_LOG=y
-CONFIG_KPM=y
-EOF
+          echo "CONFIG_KSU=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KPROBES=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KPM=y" >> arch/arm64/configs/gki_defconfig
 
       - name: Build Kernel
         run: |
@@ -66,7 +61,7 @@ EOF
           tools/bazel run --config=fast //common:kernel_aarch64_config -- --update
           tools/bazel run --config=fast //common:kernel_aarch64_dist
 
-      - name: Prepare AnyKernel3 (64-bit for rodin)
+      - name: Prepare AnyKernel3
         run: |
           git clone https://github.com/osm0sis/AnyKernel3 -b master AK3
           git clone https://github.com/osm0sis/AnyKernel3 -b arm64-tools AK3_tools
