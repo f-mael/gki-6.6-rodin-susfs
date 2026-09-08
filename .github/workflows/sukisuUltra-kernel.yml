@@ -1,0 +1,88 @@
+name: Build GKI 6.6 SukiSU-Ultra SUSFS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet /etc/mysql /var/lib/mysql /usr/local/lib/android
+          sudo apt-get clean
+          df -h
+
+      - name: Set up Build Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git automake flex lzop bison gperf build-essential zip curl zlib1g-dev libssl-dev libxml2-utils
+
+      - name: Install Repo Tool
+        run: |
+          mkdir -p ~/.bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
+          chmod a+rx ~/.bin/repo
+          echo "$HOME/.bin" >> $GITHUB_PATH
+
+      - name: Sync GKI Source
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          mkdir -p android-kernel && cd android-kernel
+          repo init -u https://android.googlesource.com/kernel/manifest -b common-android15-6.6 --depth=1
+          repo sync -c -j$(nproc) --no-tags --no-clone-bundle
+
+      - name: Integrate SukiSU-Ultra & SUSFS
+        env:
+          SUKISU_COMMIT: main
+          SUSFS_BRANCH: gki-android15-6.6
+        run: |
+          cd android-kernel
+          git clone https://gitlab.com/simonpunk/susfs4ksu -b "$SUSFS_BRANCH" susfs
+          cp -r susfs/kernel_patches/fs/* ./common/fs/
+          cp -r susfs/kernel_patches/include/linux/* ./common/include/linux/
+
+          cd common
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/$SUKISU_COMMIT/kernel/setup.sh" | bash -s builtin
+          patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch
+
+          cat >> arch/arm64/configs/gki_defconfig <<'EOF'
+CONFIG_KSU=y
+CONFIG_KPROBES=y
+CONFIG_KSU_SUSFS=y
+CONFIG_KSU_SUSFS_SUS_PATH=y
+CONFIG_KSU_SUSFS_SUS_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+CONFIG_KSU_SUSFS_ENABLE_LOG=y
+CONFIG_KPM=y
+EOF
+
+      - name: Build Kernel
+        run: |
+          cd android-kernel
+          tools/bazel run --config=fast //common:kernel_aarch64_config -- --update
+          tools/bazel run --config=fast //common:kernel_aarch64_dist
+
+      - name: Prepare AnyKernel3 (64-bit for rodin)
+        run: |
+          git clone https://github.com/osm0sis/AnyKernel3 -b master AK3
+          git clone https://github.com/osm0sis/AnyKernel3 -b arm64-tools AK3_tools
+          cp -f AK3_tools/* AK3/tools/
+          rm -rf AK3_tools
+
+          sed -i 's/is_slot_device=0;/is_slot_device=1;/' AK3/anykernel.sh
+          sed -i 's/device.name1=.*/device.name1=rodin;/' AK3/anykernel.sh
+
+          cp android-kernel/out/kernel_aarch64/dist/Image AK3/
+
+          cd AK3
+          zip -r9 ../AnyKernel3-SukiSU-Ultra-SUSFS-rodin.zip * -x .git README.md *placeholder
+
+      - name: Upload Kernel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnyKernel3-SukiSU-Ultra-SUSFS-rodin
+          path: AnyKernel3-SukiSU-Ultra-SUSFS-rodin.zip
