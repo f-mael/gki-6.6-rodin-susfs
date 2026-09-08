@@ -35,7 +35,7 @@ jobs:
 
       - name: Integrate SukiSU-Ultra & SUSFS
         env:
-          SUKISU_COMMIT: main          # Reemplazar por hash de commit si buscas reproducibilidad fija
+          SUKISU_COMMIT: main
           SUSFS_BRANCH: gki-android15-6.6
         run: |
           cd android-kernel
